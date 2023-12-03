@@ -1,0 +1,49 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'io.vproxy'
+version = '1'
+
+java {
+    sourceCompatibility = 21
+    targetCompatibility = 21
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
+    options.compilerArgs += '--enable-preview'
+}
+tasks.withType(JavaExec) {
+    jvmArgs += '--enable-preview'
+}
+tasks.withType(Test) {
+    jvmArgs += '--enable-preview'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'io.vproxy:commons:1.2.2'
+    compileOnly 'org.graalvm.sdk:nativeimage:23.1.1'
+
+    testImplementation platform('org.junit:junit-bom:5.9.1')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+shadowJar {
+    archiveBaseName = 'jdkman'
+    archiveClassifier = ''
+    archiveVersion = ''
+    manifest {
+        attributes 'Main-Class': 'io.vproxy.jdkman.Main'
+    }
+    exclude "module-info.class"
+}
