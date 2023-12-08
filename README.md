@@ -10,7 +10,7 @@
 
 ### 1. Download
 
-Download the pre-built binary from the release page.  
+Download the pre-built binary from the [release page](https://github.com/wkgcass/jdkman/releases).  
 You will need to download the binary corresponding to your operating system and cpu architecture.
 
 Rename the downloaded file `jdkman-$os-$arch` to `jdkman`  
