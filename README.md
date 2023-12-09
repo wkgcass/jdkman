@@ -4,7 +4,8 @@
 
 `jdkman` is a command line tool which helps you manage multiple JDK instances.
 
-[An asciinema cast](https://asciinema.org/a/625934) shows how to use `jdkman`.
+[An asciinema cast](https://asciinema.org/a/625934) shows how to use `jdkman`.  
+[This video](https://www.bilibili.com/video/BV1Gu4y137cg/) shows how to configure `jdkman` on Windows.
 
 ## How to install
 
