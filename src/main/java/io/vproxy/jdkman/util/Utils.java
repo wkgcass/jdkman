@@ -6,6 +6,7 @@ import io.vproxy.base.util.OS;
 import io.vproxy.jdkman.entity.JDKInfo;
 import io.vproxy.jdkman.entity.JDKInfoMatcher;
 import io.vproxy.jdkman.entity.JDKManConfig;
+import io.vproxy.jdkman.entity.MatchOptions;
 import io.vproxy.jdkman.ex.ErrorResult;
 
 import java.io.*;
@@ -16,6 +17,7 @@ import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.List;
 
 public class Utils {
     private Utils() {
@@ -154,16 +156,7 @@ public class Utils {
         var currentMatcher = Utils.currentVersion();
         JDKInfo current = null;
         if (currentMatcher != null) {
-            var ls = new ArrayList<JDKInfo>();
-            for (var jdk : config.getJdks()) {
-                if (currentMatcher.matches(jdk)) {
-                    ls.add(jdk);
-                }
-            }
-            if (!ls.isEmpty()) {
-                ls.sort(JDKInfo::compareTo);
-                current = ls.getLast();
-            }
+            current = findProperJDK(config, currentMatcher);
         }
         if (current != null) {
             return current;
@@ -181,6 +174,35 @@ public class Utils {
         // has jdk, but non match the default id
         Logger.shouldNotHappen(STR."unable to find jdk with id == \{config.getDefaultJDK()}");
         return config.getJdks().getFirst();
+    }
+
+    private static JDKInfo findProperJDK(JDKManConfig config, JDKInfoMatcher currentMatcher) {
+        var ls = new ArrayList<JDKInfo>();
+        var optsList = List.of(
+            // most strict matching
+            new MatchOptions(),
+            // skip build version
+            new MatchOptions()
+                .setMatchBuildVersion(false),
+            // skip build version and implementor
+            new MatchOptions()
+                .setMatchBuildVersion(false)
+                .setMatchImplementor(false),
+            // most loose matching
+            new MatchOptions(false)
+        );
+        for (var opts : optsList) {
+            for (var jdk : config.getJdks()) {
+                if (currentMatcher.match(jdk, opts)) {
+                    ls.add(jdk);
+                }
+            }
+            if (!ls.isEmpty()) {
+                ls.sort(JDKInfo::compareTo);
+                return ls.getFirst();
+            }
+        }
+        return null;
     }
 
     public static String fileMD5(File file) throws IOException {

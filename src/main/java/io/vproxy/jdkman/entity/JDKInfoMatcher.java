@@ -24,19 +24,32 @@ public class JDKInfoMatcher {
     }
 
     @SuppressWarnings("RedundantIfStatement")
-    public boolean matches(JDKInfo that) {
-        if (implementor != null
-            && !implementor.equals(that.getImplementor())) {
-            return false;
-        }
-        if (majorVersion != that.getMajorVersion())
-            return false;
-        if (majorVersion == 1) {
-            // 1.7.x, 1.8.x, the minor version is critical
-            if (minorVersion != null
-                && minorVersion != that.getMinorVersion())
+    public boolean match(JDKInfo that, MatchOptions opts) {
+        if (opts.matchImplementor) {
+            if (implementor != null
+                && !implementor.equals(that.getImplementor())) {
                 return false;
+            }
+        }
+        if (opts.matchMajorVersion) {
+            if (majorVersion != that.getMajorVersion())
+                return false;
+            if (majorVersion == 1) {
+                // 1.7.x, 1.8.x, the minor version is critical
+                if (minorVersion != null
+                    && minorVersion != that.getMinorVersion())
+                    return false;
+            }
         } else {
+            if (majorVersion > that.getMajorVersion())
+                return false;
+            if (majorVersion == 1 && that.getMajorVersion() == 1) {
+                if (minorVersion != null
+                    && minorVersion > that.getMinorVersion())
+                    return false;
+            }
+        }
+        if (majorVersion != 1) {
             // 11.x.x, 21.x.x, the minor version is not critical
             if (minorVersion != null
                 && minorVersion > that.getMinorVersion())
@@ -49,9 +62,11 @@ public class JDKInfoMatcher {
                 return false;
             }
         }
-        if (buildVersion != null
-            && !buildVersion.equals(that.getBuildVersion())) {
-            return false;
+        if (opts.matchBuildVersion) {
+            if (buildVersion != null
+                && !buildVersion.equals(that.getBuildVersion())) {
+                return false;
+            }
         }
         return true;
     }
