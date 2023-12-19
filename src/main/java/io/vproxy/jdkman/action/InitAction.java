@@ -7,6 +7,7 @@ import io.vproxy.base.util.Utils;
 import io.vproxy.jdkman.entity.JDKManConfig;
 import io.vproxy.jdkman.ex.ErrorResult;
 import io.vproxy.jdkman.res.ResConsts;
+import vjson.Stringifier;
 import vjson.simple.SimpleString;
 
 import java.io.*;
@@ -154,8 +155,19 @@ public class InitAction implements Action {
         if (shellType == ShellType.pwsh) {
             return buildPowershellEval(jdkman);
         } else {
-            return STR."""
-                JDKMAN_SCRIPT_PATH=\{jdkman.getAbsolutePath()}
+            return buildBashEval(jdkman);
+        }
+    }
+
+    private static String jsonStringify(String s) {
+        var stringiferBuilder = new Stringifier.StringOptions.Builder();
+        stringiferBuilder.setPrintableChar(_ -> true);
+        return new SimpleString(s).stringify(stringiferBuilder.build());
+    }
+
+    private static String buildBashEval(File jdkman) {
+        return STR."""
+                JDKMAN_SCRIPT_PATH=\{jsonStringify(jdkman.getAbsolutePath())}
                 export PATH="$JDKMAN_SCRIPT_PATH:$PATH"
                 function cdjh() {
                     builtin cd "$@"
@@ -164,7 +176,6 @@ public class InitAction implements Action {
                 alias cd=cdjh
                 export JAVA_HOME="`jdkman which`"
                 """;
-        }
     }
 
     private static String buildPowershellEval(File jdkman) throws ErrorResult {
@@ -189,7 +200,9 @@ public class InitAction implements Action {
             sb.append("\n");
             sb.append("}\n");
         }
-        sb.append("$JDKMAN_SCRIPT_PATH = ").append(new SimpleString(jdkman.getAbsolutePath()).stringify()).append("\n");
+        sb.append("$JDKMAN_SCRIPT_PATH = ")
+            .append(jsonStringify(jdkman.getAbsolutePath()))
+            .append(" | ConvertFrom-Json\n");
         sb.append(STR."""
             $env:PATH = "$JDKMAN_SCRIPT_PATH\{pathSeparatorInPSStr()}${env:PATH}"
             $env:JAVA_HOME = jdkman which
