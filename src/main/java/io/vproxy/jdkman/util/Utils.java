@@ -140,11 +140,10 @@ public class Utils {
                         return parseVersion(content);
                     } catch (ErrorResult e) {
                         assert Logger.lowLevelDebug(STR."unable to parse file \{path}: \{content}");
-                        continue;
                     }
                 }
                 dir = dir.getParentFile();
-            } while (dir.getParentFile() != null);
+            } while (dir != null);
         } catch (IOException e) {
             Logger.warn(LogType.FILE_ERROR, "failed to retrieve current version from file", e);
             return null;
