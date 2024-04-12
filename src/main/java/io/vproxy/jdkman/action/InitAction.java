@@ -7,8 +7,6 @@ import io.vproxy.base.util.Utils;
 import io.vproxy.jdkman.entity.JDKManConfig;
 import io.vproxy.jdkman.ex.ErrorResult;
 import io.vproxy.jdkman.res.ResConsts;
-import vjson.Stringifier;
-import vjson.simple.SimpleString;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -71,14 +69,14 @@ public class InitAction implements Action {
             }
         }
 
-        var jdkman = jdkmanScriptPathFile();
+        var jdkmanScriptDir = jdkmanScriptPathFile();
 
         for (var exe : EXECUTABLES) {
             var suffix = "";
             if (OS.isWindows()) {
                 suffix = ".exe"; // use jdkman-proxy binary
             }
-            var path = Path.of(jdkman.getAbsolutePath(), exe + suffix);
+            var path = Path.of(jdkmanScriptDir.getAbsolutePath(), exe + suffix);
             var file = path.toFile();
             if (file.exists()) {
                 if (!file.isFile()) {
@@ -115,25 +113,25 @@ public class InitAction implements Action {
             }
         }
 
-        var scriptToEval = getScriptToEval(jdkman, shellType);
+        var scriptToEval = getScriptToEval(jdkmanScriptDir, shellType);
         System.out.println(scriptToEval.trim());
 
         return false;
     }
 
     private File jdkmanScriptPathFile() throws ErrorResult {
-        var jdkman = Path.of(Utils.homedir(), "jdkman-scripts").toFile();
-        if (jdkman.exists()) {
-            if (!jdkman.isDirectory()) {
-                throw new ErrorResult(STR."\{jdkman} is not a directory");
+        var jdkmanScriptDir = Path.of(Utils.homedir(), "jdkman-scripts").toFile();
+        if (jdkmanScriptDir.exists()) {
+            if (!jdkmanScriptDir.isDirectory()) {
+                throw new ErrorResult(STR."\{jdkmanScriptDir} is not a directory");
             }
         } else {
-            var ok = jdkman.mkdirs();
+            var ok = jdkmanScriptDir.mkdirs();
             if (!ok) {
-                throw new ErrorResult(STR."failed to create directory: \{jdkman}");
+                throw new ErrorResult(STR."failed to create directory: \{jdkmanScriptDir}");
             }
         }
-        return jdkman;
+        return jdkmanScriptDir;
     }
 
     private static InputStream getScriptContent(String exe) {
@@ -151,23 +149,28 @@ public class InitAction implements Action {
         }
     }
 
-    private static String getScriptToEval(File jdkman, ShellType shellType) throws ErrorResult {
+    private static String getScriptToEval(File jdkmanScriptDir, ShellType shellType) throws ErrorResult {
         if (shellType == ShellType.pwsh) {
-            return buildPowershellEval(jdkman);
+            return buildPowershellEval(jdkmanScriptDir);
         } else {
-            return buildBashEval(jdkman);
+            return buildBashEval(jdkmanScriptDir);
         }
     }
 
-    private static String jsonStringify(String s) {
-        var stringiferBuilder = new Stringifier.StringOptions.Builder();
-        stringiferBuilder.setPrintableChar(_ -> true);
-        return new SimpleString(s).stringify(stringiferBuilder.build());
+    private static String writeJDKManScriptDirPathToTmpFile(File jdkmanScriptDir) throws ErrorResult {
+        try {
+            var file = File.createTempFile("jdkman-script-dir-path", ".txt");
+            Files.writeString(file.toPath(), jdkmanScriptDir.getAbsolutePath());
+            return file.getAbsolutePath();
+        } catch (IOException e) {
+            throw new ErrorResult("failed to create temporary file for jdkman-script path", e);
+        }
     }
 
-    private static String buildBashEval(File jdkman) {
+    private static String buildBashEval(File jdkmanScriptDir) throws ErrorResult {
+        var jdkmanScriptDirPathTmpFile = writeJDKManScriptDirPathToTmpFile(jdkmanScriptDir);
         return STR."""
-                JDKMAN_SCRIPT_PATH=\{jsonStringify(jdkman.getAbsolutePath())}
+                JDKMAN_SCRIPT_PATH=`cat \{jdkmanScriptDirPathTmpFile}`
                 export PATH="$JDKMAN_SCRIPT_PATH:$PATH"
                 function cdjh() {
                     builtin cd "$@"
@@ -175,13 +178,15 @@ public class InitAction implements Action {
                 }
                 alias cd=cdjh
                 export JAVA_HOME="`jdkman which`"
+                rm -f \{jdkmanScriptDirPathTmpFile}
                 """;
     }
 
-    private static String buildPowershellEval(File jdkman) throws ErrorResult {
-        Path tmpFile;
+    private static String buildPowershellEval(File jdkmanScriptDir) throws ErrorResult {
+        var jdkmanScriptDirPathTmpFile = writeJDKManScriptDirPathToTmpFile(jdkmanScriptDir);
+        Path initPs1File;
         try {
-            tmpFile = Files.createTempFile("jdkman-init", ".ps1");
+            initPs1File = Files.createTempFile("jdkman-init", ".ps1");
         } catch (IOException e) {
             Logger.error(LogType.FILE_ERROR, "failed to create jdkman-init.ps1 tmp file", e);
             throw new ErrorResult("failed to create jdkman-init.ps1 file");
@@ -200,9 +205,9 @@ public class InitAction implements Action {
             sb.append("\n");
             sb.append("}\n");
         }
-        sb.append("$JDKMAN_SCRIPT_PATH = ")
-            .append(jsonStringify(jdkman.getAbsolutePath()))
-            .append(" | ConvertFrom-Json\n");
+        sb.append("$JDKMAN_SCRIPT_PATH = (Get-Content ")
+            .append(jdkmanScriptDirPathTmpFile)
+            .append(")\n");
         sb.append(STR."""
             $env:PATH = "$JDKMAN_SCRIPT_PATH\{pathSeparatorInPSStr()}${env:PATH}"
             $env:JAVA_HOME = jdkman which
@@ -212,16 +217,17 @@ public class InitAction implements Action {
                 $env:JAVA_HOME = jdkman which
             }
             Set-Alias -Name cd -Value cdjh -Option AllScope
-            Remove-Item \{tmpFile}
+            Remove-Item \{initPs1File}
+            Remove-Item \{jdkmanScriptDirPathTmpFile}
             """);
 
         try {
-            Files.writeString(tmpFile, sb.toString());
+            Files.writeString(initPs1File, sb.toString());
         } catch (IOException e) {
             Logger.error(LogType.FILE_ERROR, "failed to release jdkman-init.ps1 tmp file", e);
             throw new ErrorResult("failed to release jdkman-init.ps1 file");
         }
-        return STR.". \{tmpFile}";
+        return STR.". \{initPs1File}";
     }
 
     private static String pathSeparatorInPSStr() {
