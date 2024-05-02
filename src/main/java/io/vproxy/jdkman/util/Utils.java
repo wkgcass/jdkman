@@ -10,6 +10,7 @@ import io.vproxy.jdkman.entity.MatchOptions;
 import io.vproxy.jdkman.ex.ErrorResult;
 
 import java.io.*;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,7 +18,9 @@ import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.function.Function;
 
 public class Utils {
     private Utils() {
@@ -128,26 +131,87 @@ public class Utils {
     }
 
     private static final String JAVA_VERSION = ".java-version";
+    private static final LinkedHashMap<String, Function<byte[], String>> TRY_CHARSETS = new LinkedHashMap<>() {{
+        put("UTF-8", tryCharset(StandardCharsets.UTF_8));
+        put("UTF-16LE", tryCharset(StandardCharsets.UTF_16LE));
+        put("UTF-16BE", tryCharset(StandardCharsets.UTF_16BE));
+        put("BOM", tryCharsetWithBOM());
+    }};
+
+    private static Function<byte[], String> tryCharset(Charset charset) {
+        return b -> new String(b, charset);
+    }
+
+    private static Function<byte[], String> tryCharsetWithBOM() {
+        return b -> {
+            if (b.length < 2) {
+                return null;
+            }
+            if (b[0] == (byte) 0xFF && b[1] == (byte) 0xFE) {
+                var bb = new byte[b.length - 2];
+                System.arraycopy(b, 2, bb, 0, b.length - 2);
+                return new String(bb, StandardCharsets.UTF_16LE);
+            } else if (b[0] == (byte) 0xFE && b[1] == (byte) 0xFF) {
+                var bb = new byte[b.length - 2];
+                System.arraycopy(b, 2, bb, 0, b.length - 2);
+                return new String(bb, StandardCharsets.UTF_16BE);
+            }
+            if (b.length < 3) {
+                return null;
+            }
+            if (b[0] == (byte) 0xEF && b[1] == (byte) 0xBB && b[2] == (byte) 0xBF) {
+                var bb = new byte[b.length - 3];
+                System.arraycopy(b, 3, bb, 0, b.length - 3);
+                return new String(bb, StandardCharsets.UTF_8);
+            }
+            return null;
+        };
+    }
 
     public static JDKInfoMatcher currentVersion() {
+        File dir;
         try {
-            var dir = new File("").getCanonicalFile();
-            do {
-                var path = Path.of(dir.getAbsolutePath(), JAVA_VERSION);
-                if (path.toFile().exists() && path.toFile().isFile()) {
-                    var content = Files.readString(path).trim();
-                    try {
-                        return parseVersion(content);
-                    } catch (ErrorResult e) {
-                        assert Logger.lowLevelDebug(STR."unable to parse file \{path}: \{content}");
-                    }
-                }
-                dir = dir.getParentFile();
-            } while (dir != null);
+            dir = new File("").getCanonicalFile();
         } catch (IOException e) {
             Logger.warn(LogType.FILE_ERROR, "failed to retrieve current version from file", e);
             return null;
         }
+        do {
+            var path = Path.of(dir.getAbsolutePath(), JAVA_VERSION);
+            if (path.toFile().exists() && path.toFile().isFile()) {
+                byte[] contentBytes;
+                try {
+                    contentBytes = Files.readAllBytes(path);
+                } catch (IOException e) {
+                    Logger.warn(LogType.FILE_ERROR, STR."failed to retrieve current version from file \{path}", e);
+                    return null;
+                }
+                var lastErrors = new ArrayList<Throwable>();
+                for (var entry : TRY_CHARSETS.entrySet()) {
+                    var charsetName = entry.getKey();
+                    var f = entry.getValue();
+                    var content = f.apply(contentBytes);
+                    if (content == null) {
+                        lastErrors.add(new Exception(STR."unable to parse bytes to string with \{charsetName} in file \{path}"));
+                        continue;
+                    }
+                    content = content.trim();
+                    content = new String(content.getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8);
+                    try {
+                        return parseVersion(content);
+                    } catch (ErrorResult e) {
+                        assert Logger.lowLevelDebug(STR."unable to parse file \{path}: \{content}");
+                        lastErrors.add(e);
+                    }
+                }
+                Logger.warn(LogType.FILE_ERROR, STR."failed to retrieve current version from file \{path}: \{
+                    lastErrors.stream().map(io.vproxy.base.util.Utils::formatErr).toList()
+                    }");
+                return null;
+            }
+            dir = dir.getParentFile();
+        } while (dir != null);
+
         return null;
     }
 
