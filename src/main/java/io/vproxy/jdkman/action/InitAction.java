@@ -4,6 +4,7 @@ import io.vproxy.base.util.LogType;
 import io.vproxy.base.util.Logger;
 import io.vproxy.base.util.OS;
 import io.vproxy.base.util.Utils;
+import io.vproxy.jdkman.Main;
 import io.vproxy.jdkman.entity.JDKManConfig;
 import io.vproxy.jdkman.ex.ErrorResult;
 import io.vproxy.jdkman.res.ResConsts;
@@ -42,6 +43,7 @@ public class InitAction implements Action {
             "javaws", "jcontrol", "jweblauncher"
         ));
     }};
+    private static final String VERSION_FILE = "version.txt";
 
     @Override
     public String validate(String[] options) {
@@ -70,6 +72,14 @@ public class InitAction implements Action {
         }
 
         var jdkmanScriptDir = jdkmanScriptPathFile();
+        var versionFilePath = Path.of(jdkmanScriptDir.getAbsolutePath(), VERSION_FILE);
+        boolean versionMatches = false;
+        if (versionFilePath.toFile().isFile()) {
+            var version = Files.readString(versionFilePath).trim();
+            if (version.equals(Main.VERSION)) {
+                versionMatches = true;
+            }
+        }
 
         for (var exe : EXECUTABLES) {
             var suffix = "";
@@ -81,6 +91,10 @@ public class InitAction implements Action {
             if (file.exists()) {
                 if (!file.isFile()) {
                     Logger.error(LogType.INVALID_EXTERNAL_DATA, STR."\{file} is not a valid file");
+                    continue;
+                }
+                if (versionMatches) {
+                    // no need to release the file because version matches
                     continue;
                 }
                 if (OS.isWindows()) {
@@ -112,6 +126,8 @@ public class InitAction implements Action {
                 Logger.error(LogType.FILE_ERROR, STR."failed to create file \{path}", e);
             }
         }
+
+        Files.writeString(versionFilePath, Main.VERSION);
 
         var scriptToEval = getScriptToEval(jdkmanScriptDir, shellType);
         System.out.println(scriptToEval.trim());
