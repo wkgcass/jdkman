@@ -42,6 +42,10 @@ public class InitAction implements Action {
         addAll(Arrays.asList(
             "javaws", "jcontrol", "jweblauncher"
         ));
+        addAll(Arrays.asList(
+            "jabswitch", "jaccessinspector", "jaccesswalker",
+            "javaw", "kinit", "klist", "ktab"
+        ));
     }};
     private static final String VERSION_FILE = "version.txt";
 
