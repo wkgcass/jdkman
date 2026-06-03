@@ -147,7 +147,6 @@ native-image `
 	--enable-preview `
 	-jar build\libs\jdkman.jar `
 	--features=io.vproxy.jdkman.res.Feature `
-	--static `
 	-Ob -march=compatibility `
 	--no-fallback `
 	-o jdkman
