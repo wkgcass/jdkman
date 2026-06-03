@@ -7,7 +7,6 @@ import io.vproxy.base.util.Utils;
 import io.vproxy.jdkman.Main;
 import io.vproxy.jdkman.entity.JDKManConfig;
 import io.vproxy.jdkman.ex.ErrorResult;
-import io.vproxy.jdkman.res.ResConsts;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -92,6 +91,7 @@ public class InitAction implements Action {
             }
             var path = Path.of(jdkmanScriptDir.getAbsolutePath(), exe + suffix);
             var file = path.toFile();
+            var scriptContent = getScriptContent(exe);
             if (file.exists()) {
                 if (!file.isFile()) {
                     Logger.error(LogType.INVALID_EXTERNAL_DATA, STR."\{file} is not a valid file");
@@ -102,11 +102,14 @@ public class InitAction implements Action {
                     continue;
                 }
                 if (OS.isWindows()) {
-                    // check file md5 for windows, because windows doesn't allow files to be deleted while they are running
-                    var md5 = io.vproxy.jdkman.util.Utils.fileMD5(file);
-                    if (md5.equals(ResConsts.MD5_JDKMAN_PROXY_WINDOWS_X86_64)) {
-                        // the file is the latest, no need to release it again
-                        continue;
+                    // check file size for windows, because windows doesn't allow files to be deleted while they are running
+                    try {
+                        if (file.length() == scriptContent.available()) {
+                            // the file size matches the source, no need to release it again
+                            continue;
+                        }
+                    } catch (IOException e) {
+                        // ignore, will re-create the file
                     }
                 }
                 var ok = file.delete();
@@ -121,7 +124,6 @@ public class InitAction implements Action {
                 continue;
             }
 
-            var scriptContent = getScriptContent(exe);
             try (scriptContent; var fos = new FileOutputStream(file)) {
                 scriptContent.transferTo(fos);
                 //noinspection ResultOfMethodCallIgnored
