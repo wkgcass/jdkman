@@ -239,8 +239,8 @@ public class InitAction implements Action {
                 $env:JAVA_HOME = jdkman which
             }
             Set-Alias -Name cd -Value cdjh -Option AllScope
-            Remove-Item \{initPs1File}
-            Remove-Item \{jdkmanScriptDirPathTmpFile}
+            Remove-Item (Get-Item \{initPs1File}).FullName
+            Remove-Item (Get-Item \{jdkmanScriptDirPathTmpFile}).FullName
             """);
 
         try {
